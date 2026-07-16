@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kontrol Room — the shore report for your cluster</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%8A%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+
+    <header class="masthead">
+      <div class="brandline">
+        <svg class="brand-civo-mark" viewBox="180 180 1110 440" role="img" aria-label="Civo" fill="currentColor"><path d="M1106.52,282.23c-87.34,0-167.12,67.95-167.12,162.68s79.78,162.68,167.12,162.68,167.12-67.95,167.12-162.68-79.09-162.68-167.12-162.68ZM1106.58,569.34c-41.95,0-78.46-46.18-78.46-124.43s36.47-124.57,78.42-124.57,79.07,46.32,79.07,124.57-36.39,124.43-79.03,124.43Z"/><path d="M498.55,196.6c6.43,32.19,6.43,65.34,0,97.53-.42,2.08,1.75,3.72,3.62,2.71l95.57-51.48-95.57-51.48c-1.87-1.01-4.04.63-3.62,2.71Z"/><path d="M633.09,603.58h-131.18c-2.65,0-3.61-3.57-1.28-4.8,12.76-6.86,22.54-18.15,27.16-31.64,1.92-4.8,2.97-9.97,2.97-15.32v-154.23c0-14.36-6.63-27.98-17.97-36.85l-15.74-12.32c-1.42-1.11-1.23-3.31.36-4.16l57.68-31.07,45.52-24.49c1.66-.89,3.68.31,3.68,2.2v258.6c0,6.45,1.14,12.67,3.25,18.43,4.71,13.12,14.31,24.1,26.75,30.82,2.38,1.28,1.51,4.85-1.19,4.85Z"/><path d="M955.09,289.09l-6.77-.04h-99.77c-2.79,0-3.57,3.75-1.05,4.94,5.85,2.83,10.93,6.45,15.18,10.61,17.6,17.24,21.03,44.35,7.87,68.36l-.14.27c-.37.87-2.97,6.54-6.95,15-12.3,26.24-37.45,79.38-48.06,101.69l-60.63-127.34c-10.56-25.56,1.74-55.42,25.06-68.68,2.33-1.33,1.42-4.85-1.23-4.85h-140.92c-1.88,0-3.15,1.96-2.33,3.7l147.28,309.37c.46.87,1.33,1.46,2.33,1.46h25.06c.96,0,1.83-.55,2.24-1.42,7.18-15.32,16.92-36.08,28.07-59.86,7.22-15.41,15.04-32.05,23.14-49.33,34.57-73.62,74.12-157.89,93.97-200.23.82-1.69-.46-3.66-2.33-3.66Z"/><path d="M193.72,450.25c-.48-17.93-.24-79.28,50.76-126.58,34.96-32.42,76-38.7,91.43-40.91,59.58-8.53,106.07,16.68,123.91,27.51,2.25,1.37,3.61,3.82,3.61,6.45v78.25c0,2.48-3.21,3.43-4.58,1.36-14.59-21.99-30.52-37.75-48.75-47.29-13.97-7.31-29.29-10.97-46.39-10.97-49.24,0-92.62,34.9-92.62,92.87,0,63.57,48.37,105.33,112.57,105.33,31.3,0,61.56-10.91,81.3-33.69,1.63-1.88,4.72-.51,4.4,1.95-8.99,68.44-53.72,104.04-123.71,104.04-91,0-149.34-62.98-151.91-158.31Z"/></svg>
+        <span class="brand-x">×</span>
+        <span class="brand-gc">groundcover</span>
+      </div>
+      <h1>Kontrol Room</h1>
+      <span class="spacer"></span>
+      <span id="mode-badge" class="mode-badge">connecting…</span>
+      <a id="gc-open" class="gc-open" href="https://groundcover.civo.io" target="_blank" rel="noopener">open groundcover ↗</a>
+    </header>
+
+    <!-- The Shore Report: the tide below is drawn by the cluster itself.
+         Wave amplitude tracks CPU load; conditions read from issues + wipeouts. -->
+    <div class="shore" role="img" aria-label="Animated shoreline reflecting live cluster conditions">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffe27a" />
+            <stop offset="100%" stop-color="#f5841f" />
+          </linearGradient>
+          <linearGradient id="sea1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#5fc4ae" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#1d7a6c" />
+          </linearGradient>
+          <linearGradient id="sea2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2a9d8f" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#177065" />
+          </linearGradient>
+        </defs>
+
+        <!-- sun high and happy -->
+        <circle cx="890" cy="120" r="52" fill="url(#sun)" opacity="0.95" />
+        <g stroke="#ffca4d" stroke-width="4" stroke-linecap="round" opacity="0.6">
+          <line x1="890" y1="38" x2="890" y2="22" /><line x1="890" y1="202" x2="890" y2="218" />
+          <line x1="808" y1="120" x2="792" y2="120" /><line x1="972" y1="120" x2="988" y2="120" />
+          <line x1="832" y1="62" x2="820" y2="50" /><line x1="948" y1="178" x2="960" y2="190" />
+          <line x1="948" y1="62" x2="960" y2="50" /><line x1="832" y1="178" x2="820" y2="190" />
+        </g>
+        <!-- a couple of lazy clouds -->
+        <g fill="#fffdf4" opacity="0.85">
+          <ellipse cx="240" cy="70" rx="58" ry="16" /><ellipse cx="286" cy="58" rx="34" ry="12" />
+          <ellipse cx="620" cy="105" rx="44" ry="12" /><ellipse cx="654" cy="96" rx="24" ry="9" />
+        </g>
+
+        <!-- three drifting tide bands; app.js rewrites their paths from CPU load -->
+        <g class="tide-band tide-c">
+          <path id="wave-back" fill="url(#sea1)" d="" />
+        </g>
+        <g class="tide-band tide-b">
+          <path id="wave-mid" fill="url(#sea2)" d="" />
+        </g>
+        <g class="tide-band tide-a">
+          <path id="wave-front" fill="#12655a" d="" />
+        </g>
+
+        <!-- sandy dune + groundcover grass holding it together -->
+        <path d="M0,300 L0,258 Q180,228 420,252 Q640,272 1200,246 L1200,300 Z" fill="#efdfae" />
+        <g id="dune-grass" stroke="#0b8f4d" stroke-width="2.6" stroke-linecap="round" fill="none"></g>
+      </svg>
+      <img class="boards" src="img/beach-club.png" alt="" aria-hidden="true" />
+
+      <div class="shore-overlay">
+        <div>
+          <div class="report-eyebrow">groundcover beach club · the shore report · <span id="report-cluster">…</span></div>
+          <div class="report-line">
+            Conditions: <span id="cond" class="cond">reading the water…</span>
+          </div>
+          <p class="report-sub" id="report-sub">Pulling the latest set of waves from groundcover.</p>
+        </div>
+        <div class="shore-stats" id="shore-stats"></div>
+      </div>
+    </div>
+
+    <!-- swell gauges -->
+    <section aria-labelledby="h-gauges">
+      <div class="sec-head">
+        <h2 id="h-gauges">Swell Gauges</h2>
+        <span class="what">cluster load · eBPF, zero instrumentation</span>
+        <span class="spacer"></span>
+        <span class="range-picker" id="range-picker" role="group" aria-label="Time range">
+          <button data-range="1h" class="on">1h</button>
+          <button data-range="6h">6h</button>
+          <button data-range="24h">24h</button>
+        </span>
+        <a class="gc-link" data-gc-path="/metrics" target="_blank" rel="noopener">open in groundcover ↗</a>
+      </div>
+      <div class="gauges">
+        <div class="panel gauge">
+          <h3>CPU · swell height</h3>
+          <div class="big" id="cpu-big">–</div>
+          <div class="sub" id="cpu-sub"></div>
+          <div class="chart" id="chart-cpu"></div>
+        </div>
+        <div class="panel gauge">
+          <h3>Memory · tide level</h3>
+          <div class="big" id="mem-big">–</div>
+          <div class="sub" id="mem-sub"></div>
+          <div class="chart" id="chart-memory"></div>
+        </div>
+        <div class="panel gauge">
+          <h3>Network · current</h3>
+          <div class="big" id="net-big">–</div>
+          <div class="sub" id="net-sub"></div>
+          <div class="chart" id="chart-network"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- golden signals -->
+    <section aria-labelledby="h-lineup">
+      <div class="sec-head">
+        <h2 id="h-lineup">The Lineup</h2>
+        <span class="what">workload golden signals — latency · errors · traffic</span>
+        <span class="spacer"></span>
+        <a class="gc-link" data-gc-path="/workloads" target="_blank" rel="noopener">open in groundcover ↗</a>
+      </div>
+      <div class="panel" style="overflow-x:auto">
+        <table class="tbl" id="lineup">
+          <thead>
+            <tr>
+              <th>workload</th><th>namespace</th>
+              <th class="num">req/s</th><th class="num">errors</th>
+              <th class="num">p50</th><th class="num">p95</th><th class="num">restarts</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- issues/events + logs -->
+    <section aria-labelledby="h-wipeouts">
+      <div class="two-up">
+        <div>
+          <div class="sec-head">
+            <h2 id="h-wipeouts">Wipeout Log</h2>
+            <span class="what">issues &amp; warning events</span>
+            <span class="spacer"></span>
+            <a class="gc-link" data-gc-path="/events" target="_blank" rel="noopener">events ↗</a>
+          </div>
+          <div class="panel feed" id="wipeouts"></div>
+        </div>
+        <div>
+          <div class="sec-head">
+            <h2>Beach Patrol</h2>
+            <span class="what">recent error &amp; warning logs</span>
+            <span class="spacer"></span>
+            <a class="gc-link" data-gc-path="/logs" target="_blank" rel="noopener">logs ↗</a>
+          </div>
+          <div class="panel feed" id="patrol"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- kontract: zones + apps -->
+    <section aria-labelledby="h-beaches">
+      <div class="sec-head">
+        <h2 id="h-beaches">Beaches &amp; Boards</h2>
+        <span class="what">zones &amp; apps on Konstruct</span>
+        <span class="spacer"></span>
+        <span class="what" id="kontract-mode"></span>
+      </div>
+      <div class="beaches" id="beaches"></div>
+      <div class="panel" style="overflow-x:auto">
+        <table class="tbl" id="boards">
+          <thead>
+            <tr><th>status</th><th>board</th><th>beach</th><th class="num">size</th><th>break</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <span>a kontract theme · informational · surf responsibly</span>
+      <span class="tagline">relax — your cloud's covered · observability with no limits</span>
+      <span class="spacer"></span>
+      <span>powered by <a href="https://www.civo.com" target="_blank" rel="noopener">civo</a>
+        · <a href="https://konstruct.civo.com" target="_blank" rel="noopener">konstruct</a>
+        · <a id="gc-foot" href="https://groundcover.civo.io" target="_blank" rel="noopener">groundcover</a></span>
+    </footer>
+  </div>
+
+  <div class="ship-moment" id="ship-moment" hidden>
+    <div class="card">
+      <div class="wave-emoji">🌊</div>
+      <h2 id="ship-title">Riding!</h2>
+      <p>click anywhere to keep watching the water</p>
+    </div>
+  </div>
+
+  <script src="kontract.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
