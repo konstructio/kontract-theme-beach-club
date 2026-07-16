@@ -1,0 +1,59 @@
+kontractTheme: v1
+meta:
+  name: kontrol-room
+  displayName: "Kontrol Room"
+  profile: informational
+  contract: v2
+  capabilities: [apps, zones]
+
+metaphor:
+  premise: >
+    A laid-back shore station: your cluster is the ocean, groundcover is the
+    dune grass holding the beach together, and the shore report tells you
+    whether the water is clean, choppy, or blown out.
+  aesthetic:
+    style: konstruct-native
+    palette: ["#0b1220", "#c6f94e", "#3ba7e9", "#ff9e64", "#f0e7d4"]
+    motion: "slow ambient tide; nothing demands attention unless something is wrong"
+  branding:
+    references: ["Civo", "groundcover", "Konstruct"]
+    tone: "surf report meets ops console; calm, plain-spoken, a little salty"
+
+vocabulary:
+  zone:   { singular: beach, plural: beaches, verb: claim }
+  app:    { singular: board, plural: boards,  verb: "paddle out" }
+  deploy: { verb: "paddle out" }
+
+zones:
+  metaphor: "beach"
+  tiers:
+    small:  { name: "tide pool",   fits: "a couple of boards" }
+    medium: { name: "sheltered cove", fits: "a small crew" }
+    large:  { name: "point break", fits: "the whole lineup" }
+  upgradeNarrative: "the tide comes in — more beach to surf"
+
+apps:
+  metaphor: "surfboard"
+  phaseWords:
+    Building: "Shaping"
+    Pushing: "Waxing"
+    Deploying: "Paddling out"
+    Live: "Riding"
+    Failed: "Wiped out"
+
+shipMoment:
+  description: >
+    When a board that was paddling out catches its wave and reaches Riding,
+    a wave washes over the screen with the board's name — a short, skippable
+    swell of celebration.
+  durationSeconds: 5
+  skippable: true
+  blocking: false
+
+storyline:
+  slots:
+    references: ["civo", "groundcover", "konstruct"]
+
+generation:
+  promptVersion: 1
+  model: ""
