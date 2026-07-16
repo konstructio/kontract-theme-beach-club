@@ -1,7 +1,7 @@
 kontractTheme: v1
 meta:
-  name: kontrol-room
-  displayName: "Kontrol Room"
+  name: beach-club
+  displayName: "Beach Club"
   profile: informational
   contract: v2
   capabilities: [apps, zones]

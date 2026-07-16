@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Config holds all runtime configuration for the Kontrol Room theme server.
+// Config holds all runtime configuration for the Beach Club theme server.
 // Every field is sourced from an environment variable with a sensible default,
 // so the zero-config path (no env set) still boots into sample mode.
 type Config struct {

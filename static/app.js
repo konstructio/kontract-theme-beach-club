@@ -1,4 +1,4 @@
-/* Kontrol Room — the shore report for your cluster.
+/* Beach Club — the shore report for your cluster.
  * Data arrives two ways, never with a credential in the browser:
  *   - /api/gc/*  — this theme's own backend proxying groundcover (or sample data)
  *   - kontract.js — zones/apps via the Konstruct postMessage broker

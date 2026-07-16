@@ -20,7 +20,7 @@ import (
 const upstreamTimeout = 15 * time.Second
 
 // GCClient talks to the groundcover ingest API. It exposes the two transports
-// the Kontrol Room needs: PromQL (instant + range) and the stateless MCP
+// the Beach Club needs: PromQL (instant + range) and the stateless MCP
 // JSON-RPC endpoint. It is safe for concurrent use.
 //
 // The client never logs or echoes the API key.

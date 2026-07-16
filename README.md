@@ -1,4 +1,4 @@
-# Kontrol Room
+# Beach Club
 
 The shore report for your cluster. A [kontract theme](https://konstruct.civo.com/docs/next/konduit)
 for [Konstruct](https://konstruct.civo.com) that pairs zone/app data from the

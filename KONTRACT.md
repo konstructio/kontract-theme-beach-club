@@ -1,6 +1,6 @@
 # KONTRACT
 version: v2
-theme: kontrol-room
+theme: beach-club
 capabilities: [apps, zones]
 vocabulary:
   zone: { singular: beach, plural: beaches, verb: claim }
@@ -9,7 +9,7 @@ vocabulary:
 
 ## The contract (v2 — postMessage transport)
 
-Kontrol Room is an informational theme: it reads zones and apps through
+Beach Club is an informational theme: it reads zones and apps through
 `kontract.js` (byte-for-byte from the starter; never edited) and renders them
 as beaches and boards. It performs no writes.
 

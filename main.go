@@ -1,4 +1,4 @@
-// Command kontract-theme-kontrol-room serves the Kontrol Room kontract theme: a
+// Command kontract-theme-beach-club serves the Beach Club kontract theme: a
 // static frontend (embedded) plus a JSON proxy under /api/gc/ that reads live
 // observability data from the groundcover API, with an embedded sample-data
 // snapshot for standalone/offline use.
@@ -70,7 +70,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		logger.Info("kontrol-room theme server starting",
+		logger.Info("beach-club theme server starting",
 			"port", cfg.Port,
 			"cluster", cfg.Cluster,
 			"mode", modeLabel(cfg.Live()),
