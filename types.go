@@ -109,6 +109,31 @@ type LogsResponse struct {
 	Logs []LogEntry `json:"logs"`
 }
 
+// ZoneWorkload is one measured workload running in a kontract zone namespace.
+// Zone is parsed from the namespace suffix (kontract-<org...>-<zone>); the
+// frontend correlates it against the kontract zone list.
+type ZoneWorkload struct {
+	Name         string  `json:"name"`
+	Namespace    string  `json:"namespace"`
+	Zone         string  `json:"zone"`
+	Cluster      string  `json:"cluster"`
+	CPUCores     float64 `json:"cpuCores"`
+	MemBytes     float64 `json:"memBytes"`
+	RPS          float64 `json:"rps"`
+	ErrorRatePct float64 `json:"errorRatePct"`
+	P50Ms        float64 `json:"p50Ms"`
+	P95Ms        float64 `json:"p95Ms"`
+	Restarts     int     `json:"restarts"`
+}
+
+// ZoneWorkloadsResponse is returned by GET /api/gc/zone-workloads.
+// AgentCoverage is false when no kontract-* namespace reports metrics — i.e.
+// the zone workload clusters have no groundcover agent yet.
+type ZoneWorkloadsResponse struct {
+	AgentCoverage bool           `json:"agentCoverage"`
+	Workloads     []ZoneWorkload `json:"workloads"`
+}
+
 // Issue is one monitor-issue row.
 type Issue struct {
 	Severity  string `json:"severity"`

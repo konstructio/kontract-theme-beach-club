@@ -22,9 +22,9 @@
       <a id="gc-open" class="gc-open" href="https://groundcover.civo.io" target="_blank" rel="noopener">open groundcover ↗</a>
     </header>
 
-    <!-- The Shore Report: the tide below is drawn by the cluster itself.
-         Wave amplitude tracks CPU load; conditions read from issues + wipeouts. -->
-    <div class="shore" role="img" aria-label="Animated shoreline reflecting live cluster conditions">
+    <!-- The Shore Report: conditions read from YOUR boards; the tide is drawn
+         by the control plane's CPU as ambient weather. -->
+    <div class="shore" role="img" aria-label="Animated shoreline reflecting your boards' conditions">
       <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <defs>
           <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
@@ -78,17 +78,60 @@
           <div class="report-line">
             Conditions: <span id="cond" class="cond">reading the water…</span>
           </div>
-          <p class="report-sub" id="report-sub">Pulling the latest set of waves from groundcover.</p>
+          <p class="report-sub" id="report-sub">Checking on your boards.</p>
         </div>
         <div class="shore-stats" id="shore-stats"></div>
       </div>
     </div>
 
-    <!-- swell gauges -->
+    <!-- ============ PLANE 1 · YOUR ZONES & BOARDS (kontract spec) ============ -->
+    <section aria-labelledby="h-beaches">
+      <div class="sec-head">
+        <h2 id="h-beaches">Beaches &amp; Boards</h2>
+        <span class="src-badge kontract">kontract · spec</span>
+        <span class="what">your zones &amp; apps as Konstruct knows them</span>
+        <span class="spacer"></span>
+        <span class="what" id="kontract-mode"></span>
+      </div>
+      <div class="beaches" id="beaches"></div>
+      <div class="panel" style="overflow-x:auto">
+        <table class="tbl" id="boards">
+          <thead>
+            <tr><th>status</th><th>board</th><th>beach</th><th class="num">size</th><th>break</th>
+              <th class="num live-col">cpu</th><th class="num live-col">req/s</th><th class="num live-col">errors</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="tbl-note">status · size · break are <b>kontract spec</b>; cpu · req/s · errors are <b>groundcover measured</b> — dashes until your zone's cluster has an agent</p>
+      </div>
+    </section>
+
+    <!-- ============ PLANE 2 · ZONE WATERS (groundcover, correlated to zones) ============ -->
+    <section aria-labelledby="h-zonewaters">
+      <div class="sec-head">
+        <h2 id="h-zonewaters">Zone Waters</h2>
+        <span class="src-badge gc">groundcover · measured</span>
+        <span class="what">what's actually moving inside your zones</span>
+        <span class="spacer"></span>
+        <a class="gc-link" data-gc-path="/workloads" target="_blank" rel="noopener">open in groundcover ↗</a>
+      </div>
+      <div class="panel" id="zone-waters" style="overflow-x:auto"></div>
+    </section>
+
+    <!-- ============ PLANE 3 · CONTROL PLANE (groundcover, cluster telemetry) ============ -->
+    <div class="band-divider" id="cp-band">
+      <div class="band-title">
+        <h2>Control Plane</h2>
+        <span class="src-badge gc">groundcover · measured</span>
+        <span class="what">the cluster running Konstruct itself · <span id="cp-cluster">…</span></span>
+      </div>
+      <div class="cp-stats" id="cp-stats"></div>
+    </div>
+
     <section aria-labelledby="h-gauges">
       <div class="sec-head">
         <h2 id="h-gauges">Swell Gauges</h2>
-        <span class="what">cluster load · eBPF, zero instrumentation</span>
+        <span class="what">control plane load · eBPF, zero instrumentation</span>
         <span class="spacer"></span>
         <span class="range-picker" id="range-picker" role="group" aria-label="Time range">
           <button data-range="1h" class="on">1h</button>
@@ -119,11 +162,10 @@
       </div>
     </section>
 
-    <!-- golden signals -->
     <section aria-labelledby="h-lineup">
       <div class="sec-head">
         <h2 id="h-lineup">The Lineup</h2>
-        <span class="what">workload golden signals — latency · errors · traffic</span>
+        <span class="what">control plane golden signals — latency · errors · traffic</span>
         <span class="spacer"></span>
         <a class="gc-link" data-gc-path="/workloads" target="_blank" rel="noopener">open in groundcover ↗</a>
       </div>
@@ -141,13 +183,12 @@
       </div>
     </section>
 
-    <!-- issues/events + logs -->
     <section aria-labelledby="h-wipeouts">
       <div class="two-up">
         <div>
           <div class="sec-head">
             <h2 id="h-wipeouts">Wipeout Log</h2>
-            <span class="what">issues &amp; warning events</span>
+            <span class="what">control plane issues &amp; warning events</span>
             <span class="spacer"></span>
             <a class="gc-link" data-gc-path="/events" target="_blank" rel="noopener">events ↗</a>
           </div>
@@ -156,31 +197,12 @@
         <div>
           <div class="sec-head">
             <h2>Beach Patrol</h2>
-            <span class="what">recent error &amp; warning logs</span>
+            <span class="what">control plane error &amp; warning logs</span>
             <span class="spacer"></span>
             <a class="gc-link" data-gc-path="/logs" target="_blank" rel="noopener">logs ↗</a>
           </div>
           <div class="panel feed" id="patrol"></div>
         </div>
-      </div>
-    </section>
-
-    <!-- kontract: zones + apps -->
-    <section aria-labelledby="h-beaches">
-      <div class="sec-head">
-        <h2 id="h-beaches">Beaches &amp; Boards</h2>
-        <span class="what">zones &amp; apps on Konstruct</span>
-        <span class="spacer"></span>
-        <span class="what" id="kontract-mode"></span>
-      </div>
-      <div class="beaches" id="beaches"></div>
-      <div class="panel" style="overflow-x:auto">
-        <table class="tbl" id="boards">
-          <thead>
-            <tr><th>status</th><th>board</th><th>beach</th><th class="num">size</th><th>break</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
       </div>
     </section>
 

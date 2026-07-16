@@ -1,8 +1,15 @@
 /* Beach Club — the shore report for your cluster.
- * Data arrives two ways, never with a credential in the browser:
- *   - /api/gc/*  — this theme's own backend proxying groundcover (or sample data)
- *   - kontract.js — zones/apps via the Konstruct postMessage broker
- * Everything is rendered with textContent; no API string touches innerHTML.
+ *
+ * Three data planes, kept visibly separate:
+ *   1. kontract · spec       — zones & apps as Konstruct declares them (kontract.js)
+ *   2. groundcover · zones   — measured signals inside kontract-* namespaces (/api/gc/zone-workloads)
+ *   3. groundcover · control — the control plane cluster itself (/api/gc/*)
+ * The theme user cares about plane 1 first, plane 3 second; plane 2 correlates
+ * the two by namespace (kontract-<org…>-<zone>) and says so honestly when the
+ * zone clusters have no agent yet.
+ *
+ * No credential ever reaches the browser. Every API-derived string is rendered
+ * with textContent.
  */
 
 (() => {
@@ -71,7 +78,8 @@
   // ---------- shoreline hero ----------
 
   // A periodic wave path (period 600px over an 1800px band) so the CSS drift
-  // animation loops seamlessly. Amplitude is set from real CPU utilisation.
+  // animation loops seamlessly. Amplitude is set from control-plane CPU load
+  // (ambient weather); conditions text is set from the user's boards.
   function wavePath(baseY, amp, phase) {
     const period = 600, width = 1800, half = period / 2;
     let d = `M0,300 L0,${baseY.toFixed(1)} `;
@@ -85,7 +93,6 @@
   }
 
   function drawTide(cpuUtil) {
-    // 0% load: glassy. 100%: pumping. Clamp so the beach never floods.
     const amp = 4 + Math.min(1, Math.max(0, cpuUtil)) * 26;
     $("#wave-back").setAttribute("d", wavePath(196, amp * 0.7, 0));
     $("#wave-mid").setAttribute("d", wavePath(214, amp, 1));
@@ -93,10 +100,8 @@
   }
 
   function plantGrass() {
-    // groundcover: the tufts holding the dune together.
     const g = $("#dune-grass");
     const duneY = (x) => {
-      // rough trace of the dune path in index.html
       if (x < 420) return 258 + (252 - 258) * (x / 420) - 18 * Math.sin((x / 420) * Math.PI);
       if (x < 640) return 252 + 10 * Math.sin(((x - 420) / 220) * Math.PI * 0.5);
       return 262 - 16 * ((x - 640) / 560);
@@ -108,48 +113,46 @@
       const y = duneY(x) + 4;
       const h = 14 + ((i * 13) % 12);
       const cls = "grass g" + ((i % 3) + 1);
-      const blades = [];
       for (let b = -1; b <= 1; b++) {
         const dx = b * (3 + (i % 3));
-        blades.push(`<path class="${cls}" d="M${x},${y} q${dx * 0.4},${-h * 0.55} ${dx},${-h}" opacity="${0.5 + (i % 4) * 0.12}"/>`);
+        svg += `<path class="${cls}" d="M${x},${y} q${dx * 0.4},${-h * 0.55} ${dx},${-h}" opacity="${0.5 + (i % 4) * 0.12}"/>`;
       }
-      svg += blades.join("");
     }
     g.innerHTML = svg; // generated numbers only — no external strings
   }
 
-  function setConditions(summary, issues) {
-    const failed = summary.pods.failed || 0;
-    const restarts = summary.restartsLastHour || 0;
-    const issueCount = issues.length;
+  // Conditions read from the user's boards — their apps come first.
+  function setBoardConditions(apps) {
+    const wiped = apps.filter((a) => a.phase === "Failed").length;
+    const busy = apps.filter((a) => a.phase && a.phase !== "Live" && a.phase !== "Failed").length;
+    const riding = apps.filter((a) => a.phase === "Live").length;
     const cond = $("#cond");
     cond.classList.remove("choppy", "blownout");
     let label, sub;
-    if (failed > 2 || issueCount > 3) {
+    if (wiped > 1) {
       label = "blown out";
       cond.classList.add("blownout");
-      sub = "The water is rough — check the wipeout log before paddling anything new out.";
-    } else if (failed > 0 || issueCount > 0 || restarts > 5) {
+      sub = "Multiple boards wiped out — check the boards table before paddling anything new out.";
+    } else if (wiped === 1) {
       label = "choppy";
       cond.classList.add("choppy");
-      sub = "Mostly rideable with a few sets breaking messy. Worth watching.";
+      sub = "One board wiped out; the rest of the lineup is riding. Worth a look.";
+    } else if (riding === 0 && busy > 0) {
+      label = "paddling out";
+      sub = "Boards are shaping and paddling out — nothing riding yet.";
     } else {
       label = "clean";
-      sub = "Glassy. Every board that paddled out is riding. Go get a coffee.";
+      sub = "Every board that paddled out is riding. Go get a coffee.";
     }
     cond.textContent = label;
     $("#report-sub").textContent = sub;
-  }
 
-  function renderShoreStats(summary) {
     const el = $("#shore-stats");
     el.textContent = "";
     const chips = [
-      { t: [String(summary.nodes.ready) + "/" + String(summary.nodes.count), " nodes on shore"], warn: summary.nodes.ready < summary.nodes.count },
-      { t: [String(summary.pods.running), " pods riding"] },
-      { t: [String(summary.pods.pending), " paddling out"], warn: summary.pods.pending > 0 },
-      { t: [String(summary.pods.failed), " wipeouts"], bad: summary.pods.failed > 0 },
-      { t: [String(summary.restartsLastHour), " restarts · 1h"], warn: summary.restartsLastHour > 5 },
+      { t: [String(riding), " boards riding"] },
+      { t: [String(busy), " paddling out"], warn: busy > 0 },
+      { t: [String(wiped), " wiped out"], bad: wiped > 0 },
     ];
     for (const c of chips) {
       const chip = document.createElement("span");
@@ -167,7 +170,7 @@
   let chartSeq = 0;
   function renderChart(el, series, opts) {
     const W = 340, H = 88, PAD = 4;
-    const colors = opts.colors || ["#c6f94e"];
+    const colors = opts.colors || ["#0b8f4d"];
     let min = Infinity, max = -Infinity;
     for (const s of series) for (const [, v] of s.points) {
       if (v < min) min = v;
@@ -236,14 +239,34 @@
     return s;
   }
 
-  // ---------- summary + hero ----------
+  // ---------- plane 3: control plane summary ----------
 
   async function loadSummary() {
     const [summary, issuesRes] = await Promise.all([gc("summary"), gc("issues")]);
     const issues = issuesRes.issues || [];
     $("#report-cluster").textContent = summary.cluster;
-    renderShoreStats(summary);
-    setConditions(summary, issues);
+    $("#cp-cluster").textContent = summary.cluster;
+
+    // control plane stat chips live in the control plane band, not the hero
+    const el = $("#cp-stats");
+    el.textContent = "";
+    const chips = [
+      { t: [summary.nodes.ready + "/" + summary.nodes.count, " nodes"], warn: summary.nodes.ready < summary.nodes.count },
+      { t: [String(summary.pods.running), " pods"] },
+      { t: [String(summary.pods.failed), " failed"], bad: summary.pods.failed > 0 },
+      { t: [String(summary.restartsLastHour), " restarts · 1h"], warn: summary.restartsLastHour > 5 },
+      { t: [String(issues.length), " issues"], bad: issues.length > 0 },
+    ];
+    for (const c of chips) {
+      const chip = document.createElement("span");
+      chip.className = "chip" + (c.bad ? " bad" : c.warn ? " warn" : "");
+      const b = document.createElement("b");
+      b.textContent = c.t[0];
+      chip.appendChild(b);
+      chip.appendChild(document.createTextNode(c.t[1]));
+      el.appendChild(chip);
+    }
+
     const util = summary.cpu.requestedCores > 0 ? summary.cpu.usedCores / summary.cpu.requestedCores : 0.15;
     drawTide(util);
     $("#cpu-sub").textContent = "of " + fmtCores(summary.cpu.requestedCores) + " requested · " + Math.round(util * 100) + "%";
@@ -251,7 +274,7 @@
     return { summary, issues };
   }
 
-  // ---------- lineup ----------
+  // ---------- plane 3: control plane lineup ----------
 
   async function loadLineup() {
     const { workloads = [] } = await gc("workloads");
@@ -357,7 +380,7 @@
     }
   }
 
-  // ---------- kontract: beaches & boards ----------
+  // ---------- plane 1: kontract beaches & boards ----------
 
   const SAMPLE_ZONES = [
     { name: "north-point", display_name: "North Point", band: "large", status: { capacity_cpu: "30", capacity_memory: "60Gi", used_cpu: "11.2", used_memory: "22Gi" } },
@@ -369,6 +392,13 @@
     { app_name: "board-rentals", phase: "Building", zone_ref: "tide-pool", size: "s", status: {} },
     { app_name: "surf-cam", phase: "Live", zone_ref: "tide-pool", size: "m", status: { url: "https://cam.example.dev" } },
     { app_name: "shark-alerts", phase: "Failed", zone_ref: "north-point", size: "s", status: { message: "image pull backoff: manifest unknown" } },
+  ];
+  // What Zone Waters looks like once agents reach the zone clusters — shown in
+  // the standalone demo only, and labeled as demo.
+  const SAMPLE_ZONE_WATERS = [
+    { name: "reef-api", namespace: "kontract-demo-north-point", zone: "north-point", cluster: "k-demo", cpuCores: 0.31, memBytes: 402653184, rps: 42.7, errorRatePct: 0.2, p50Ms: 4, p95Ms: 38, restarts: 0 },
+    { name: "swell-tracker", namespace: "kontract-demo-north-point", zone: "north-point", cluster: "k-demo", cpuCores: 0.12, memBytes: 197132288, rps: 8.1, errorRatePct: 0, p50Ms: 2, p95Ms: 12, restarts: 0 },
+    { name: "surf-cam", namespace: "kontract-demo-tide-pool", zone: "tide-pool", cluster: "k-demo", cpuCores: 0.55, memBytes: 645922816, rps: 17.3, errorRatePct: 1.4, p50Ms: 11, p95Ms: 140, restarts: 1 },
   ];
 
   function parseQty(q) {
@@ -422,7 +452,15 @@
     return wrapEl;
   }
 
-  function renderApps(apps) {
+  // matchZoneWorkload finds the measured zone workload for a kontract app:
+  // namespace must end in -<zone_ref> and workload/app names must overlap.
+  function matchZoneWorkload(app, zoneWorkloads) {
+    return zoneWorkloads.find((zw) =>
+      app.zone_ref && zw.namespace.endsWith("-" + app.zone_ref) &&
+      (zw.name.includes(app.app_name) || app.app_name.includes(zw.name)));
+  }
+
+  function renderApps(apps, zoneWorkloads) {
     const tb = $("#boards tbody");
     tb.textContent = "";
     for (const a of apps) {
@@ -455,6 +493,20 @@
         brk.className = "dim";
         brk.textContent = "–";
       }
+
+      // measured columns — groundcover, joined by zone namespace + name
+      const zw = matchZoneWorkload(a, zoneWorkloads);
+      if (zw) {
+        cell(tr, fmtCores(zw.cpuCores), "num");
+        cell(tr, zw.rps.toFixed(zw.rps >= 10 ? 0 : 1), "num");
+        const errClass = zw.errorRatePct > 5 ? "bad" : zw.errorRatePct > 1 ? "warn" : "ok";
+        cell(tr, fmtPct(zw.errorRatePct) + "%", "num " + errClass);
+      } else {
+        cell(tr, "–", "num dim");
+        cell(tr, "–", "num dim");
+        cell(tr, "–", "num dim");
+      }
+
       // ship moment: a board that was paddling out is now riding
       const prev = state.lastPhases.get(a.app_name);
       if (prev && prev !== "Live" && a.phase === "Live" && !state.shipMomentShown) {
@@ -480,8 +532,7 @@
     if (!kontract.isLaunched()) {
       modeEl.textContent = "demo tide pool — launch from Konstruct for your org";
       renderZones(SAMPLE_ZONES);
-      renderApps(SAMPLE_APPS);
-      return;
+      return { apps: SAMPLE_APPS, demo: true };
     }
     const org = new URLSearchParams(location.search).get("org") || "";
     try {
@@ -495,24 +546,107 @@
       ]);
       modeEl.textContent = "org · " + org;
       renderZones(Array.isArray(zones) ? zones : []);
-      renderApps(Array.isArray(apps) ? apps : []);
+      return { apps: Array.isArray(apps) ? apps : [], demo: false };
     } catch (err) {
       modeEl.textContent = "kontract unavailable — showing demo tide pool";
       renderZones(SAMPLE_ZONES);
-      renderApps(SAMPLE_APPS);
+      return { apps: SAMPLE_APPS, demo: true };
     }
+  }
+
+  // ---------- plane 2: zone waters ----------
+
+  async function loadZoneWaters(demo) {
+    const el = $("#zone-waters");
+    let data = { agentCoverage: false, workloads: [] };
+    try {
+      data = await gc("zone-workloads");
+    } catch (err) {
+      // fall through to the no-coverage state
+    }
+
+    // Standalone demo: show what this panel becomes once agents reach the
+    // zone clusters, clearly labeled.
+    if (demo && !data.agentCoverage) {
+      renderZoneWatersTable(el, SAMPLE_ZONE_WATERS, true);
+      return SAMPLE_ZONE_WATERS;
+    }
+
+    if (!data.agentCoverage) {
+      el.textContent = "";
+      const d = document.createElement("div");
+      d.className = "empty-calm";
+      const b = document.createElement("b");
+      b.textContent = "No groundcover agent in these waters yet. ";
+      d.append(b, document.createTextNode(
+        "Your boards run on shared-pool zone clusters that don't report to groundcover so far — " +
+        "once an agent is installed there, this panel fills in on its own. Spec-side status above stays accurate either way."));
+      el.appendChild(d);
+      return [];
+    }
+
+    renderZoneWatersTable(el, data.workloads, false);
+    return data.workloads;
+  }
+
+  function renderZoneWatersTable(el, workloads, demo) {
+    el.textContent = "";
+    if (demo) {
+      const note = document.createElement("p");
+      note.className = "tbl-note";
+      note.textContent = "demo data — this is what zone waters look like once your zone clusters report to groundcover";
+      el.appendChild(note);
+    }
+    const table = document.createElement("table");
+    table.className = "tbl";
+    const thead = table.createTHead();
+    const hr = thead.insertRow();
+    for (const h of ["zone", "workload", "cpu", "memory", "req/s", "errors", "p95", "restarts"]) {
+      const th = document.createElement("th");
+      th.textContent = h;
+      if (h !== "zone" && h !== "workload") th.className = "num";
+      hr.appendChild(th);
+    }
+    const tb = table.createTBody();
+    let lastZone = null;
+    for (const w of workloads) {
+      const tr = tb.insertRow();
+      const zoneCell = tr.insertCell();
+      if (w.zone !== lastZone) {
+        zoneCell.textContent = w.zone || "?";
+        zoneCell.className = "wl-name";
+        lastZone = w.zone;
+      } else {
+        zoneCell.textContent = "";
+      }
+      cell(tr, w.name, "wl-name");
+      cell(tr, fmtCores(w.cpuCores), "num");
+      cell(tr, fmtBytes(w.memBytes), "num");
+      cell(tr, w.rps.toFixed(w.rps >= 10 ? 0 : 1), "num");
+      const errClass = w.errorRatePct > 5 ? "bad" : w.errorRatePct > 1 ? "warn" : "ok";
+      cell(tr, fmtPct(w.errorRatePct) + "%", "num " + errClass);
+      cell(tr, fmtMs(w.p95Ms), "num " + (w.p95Ms > 1000 ? "warn" : ""));
+      cell(tr, String(w.restarts), "num " + (w.restarts > 0 ? "warn" : "dim"));
+    }
+    el.appendChild(table);
   }
 
   // ---------- orchestration ----------
 
   async function refresh() {
+    // Plane 1 first — the user's boards lead the page.
+    const k = await loadKontract();
+    const zoneWorkloads = await loadZoneWaters(k.demo);
+    renderApps(k.apps, zoneWorkloads);
+    setBoardConditions(k.apps);
+
+    // Plane 3 — control plane telemetry.
     try {
       const { issues } = await loadSummary();
       await Promise.all([loadSeries(), loadLineup(), loadWipeouts(issues), loadPatrol()]);
     } catch (err) {
-      $("#report-sub").textContent = "Lost sight of the water: " + err.message;
+      $("#report-sub").textContent = "Lost sight of the control plane: " + err.message;
     }
-    loadKontract().catch(() => {});
   }
 
   async function init() {

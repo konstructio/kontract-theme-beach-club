@@ -50,6 +50,7 @@ func (s *server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/gc/summary", s.handleSummary)
 	mux.HandleFunc("/api/gc/series", s.handleSeries)
 	mux.HandleFunc("/api/gc/workloads", s.handleWorkloads)
+	mux.HandleFunc("/api/gc/zone-workloads", s.handleZoneWorkloads)
 	mux.HandleFunc("/api/gc/events", s.handleEvents)
 	mux.HandleFunc("/api/gc/logs", s.handleLogs)
 	mux.HandleFunc("/api/gc/issues", s.handleIssues)
@@ -172,6 +173,14 @@ func (s *server) handleSeries(w http.ResponseWriter, r *http.Request) {
 // handleWorkloads returns the top workloads by request rate with golden signals.
 func (s *server) handleWorkloads(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "workloads", "workloads", nil, s.buildWorkloads)
+}
+
+// handleZoneWorkloads returns measured workloads inside kontract zone
+// namespaces, across every cluster reporting to the backend — deliberately not
+// pinned to GC_CLUSTER, because zone workloads run on shared-pool clusters that
+// report (or will report) under their own cluster names.
+func (s *server) handleZoneWorkloads(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "zone-workloads", "zoneWorkloads", nil, s.buildZoneWorkloads)
 }
 
 // handleEvents returns recent Kubernetes events (warnings/errors first).
@@ -370,6 +379,100 @@ func (s *server) buildWorkloads(ctx context.Context) (any, error) {
 		workloads = workloads[:maxWorkloads]
 	}
 	return WorkloadsResponse{Workloads: workloads}, nil
+}
+
+// zoneSel selects kontract zone namespaces across ALL clusters.
+const zoneSel = `{namespace=~"kontract-.*"}`
+
+// buildZoneWorkloads assembles per-workload usage and golden signals for every
+// workload in a kontract-* namespace, on any reporting cluster. The base set
+// comes from container CPU (every running container reports it); traffic
+// signals enrich it best-effort.
+func (s *server) buildZoneWorkloads(ctx context.Context) (any, error) {
+	base, err := s.gc.QueryInstant(ctx, `sum by (workload, namespace, cluster) (groundcover_container_cpu_usage_rate_millis`+zoneSel+`)/1000`)
+	if err != nil {
+		return nil, fmt.Errorf("zone workloads cpu: %w", err)
+	}
+
+	byKey := make(map[string]*ZoneWorkload)
+	for _, r := range base {
+		name := r.Metric["workload"]
+		ns := r.Metric["namespace"]
+		if name == "" || ns == "" {
+			continue
+		}
+		v, _ := r.Value.Float()
+		byKey[name+"/"+ns] = &ZoneWorkload{
+			Name:      name,
+			Namespace: ns,
+			Zone:      zoneFromNamespace(ns),
+			Cluster:   r.Metric["cluster"],
+			CPUCores:  round(v, 3),
+		}
+	}
+
+	s.mergeZone(ctx, byKey, `sum by (workload, namespace) (groundcover_container_memory_working_set_bytes`+zoneSel+`)`,
+		func(w *ZoneWorkload, v float64) { w.MemBytes = v })
+	s.mergeZone(ctx, byKey, `sum by (workload, namespace) (rate(groundcover_resource_total_counter`+zoneSel+`[5m]))`,
+		func(w *ZoneWorkload, v float64) { w.RPS = round(v, 3) })
+	s.mergeZone(ctx, byKey, `sum by (workload, namespace) (rate(groundcover_resource_error_counter`+zoneSel+`[5m]))`,
+		func(w *ZoneWorkload, v float64) {
+			if w.RPS > 0 {
+				w.ErrorRatePct = round(v/w.RPS*100, 2)
+			}
+		})
+	s.mergeZone(ctx, byKey, `avg by (workload, namespace) (groundcover_resource_latency_seconds{namespace=~"kontract-.*",quantile="0.5"})`,
+		func(w *ZoneWorkload, v float64) { w.P50Ms = round(v*1000, 1) })
+	s.mergeZone(ctx, byKey, `avg by (workload, namespace) (groundcover_resource_latency_seconds{namespace=~"kontract-.*",quantile="0.95"})`,
+		func(w *ZoneWorkload, v float64) { w.P95Ms = round(v*1000, 1) })
+	s.mergeZone(ctx, byKey, `sum by (workload, namespace) (increase(groundcover_container_restart_count_total`+zoneSel+`[`+restartsWindow+`]))`,
+		func(w *ZoneWorkload, v float64) { w.Restarts = int(v) })
+
+	workloads := make([]ZoneWorkload, 0, len(byKey))
+	for _, w := range byKey {
+		workloads = append(workloads, *w)
+	}
+	sort.Slice(workloads, func(i, j int) bool {
+		if workloads[i].Zone != workloads[j].Zone {
+			return workloads[i].Zone < workloads[j].Zone
+		}
+		return workloads[i].CPUCores > workloads[j].CPUCores
+	})
+	if len(workloads) > maxWorkloads*3 {
+		workloads = workloads[:maxWorkloads*3]
+	}
+	return ZoneWorkloadsResponse{AgentCoverage: len(workloads) > 0, Workloads: workloads}, nil
+}
+
+// mergeZone applies a grouped instant query onto the workload/namespace map,
+// best-effort like mergeByWorkload.
+func (s *server) mergeZone(ctx context.Context, byKey map[string]*ZoneWorkload, promql string, apply func(*ZoneWorkload, float64)) {
+	res, err := s.gc.QueryInstant(ctx, promql)
+	if err != nil {
+		s.log.Warn("zone workload signal query failed", "error", err)
+		return
+	}
+	for _, r := range res {
+		w, ok := byKey[r.Metric["workload"]+"/"+r.Metric["namespace"]]
+		if !ok {
+			continue
+		}
+		if v, err := r.Value.Float(); err == nil {
+			apply(w, v)
+		}
+	}
+}
+
+// zoneFromNamespace parses the zone name from a kontract namespace
+// (kontract-<org...>-<zone> → <zone>). Best-effort: the frontend treats it as
+// a correlation hint, not truth.
+func zoneFromNamespace(ns string) string {
+	for i := len(ns) - 1; i >= 0; i-- {
+		if ns[i] == '-' {
+			return ns[i+1:]
+		}
+	}
+	return ""
 }
 
 // mergeByWorkload runs a grouped instant query and applies apply() to the
