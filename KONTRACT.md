@@ -1,7 +1,7 @@
 # KONTRACT
 version: v2
 theme: beach-club
-capabilities: [apps, zones]
+capabilities: [apps, zones, quota, runtime-logs, app-events]
 vocabulary:
   zone: { singular: beach, plural: beaches, verb: claim }
   app: { singular: board, plural: boards, verb: "paddle out" }

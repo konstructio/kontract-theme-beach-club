@@ -21,6 +21,12 @@
     mode: { live: false, cluster: "", uiBaseUrl: "https://groundcover.civo.io" },
     lastPhases: new Map(), // app name -> phase, for the ship moment
     shipMomentShown: false,
+    org: "",
+    caps: [],
+    vm: new Map(), // app name -> { cpu:[[t,v]…], mem, rx, tx } from kontract.metrics
+    selected: null,
+    logSub: null,
+    evtSub: null,
   };
 
   const PHASE_WORDS = {
@@ -412,9 +418,119 @@
     return v;
   }
 
-  function renderZones(zones) {
+  // ---------- plane 1½: kontract metered telemetry (VictoriaMetrics) ----------
+
+  // kontract metric points are {t,v} objects; renderChart eats [t,v] tuples.
+  const vmTuples = (m, name) => {
+    const ser = ((m && m.series) || []).find((x) => x.name === name);
+    return ((ser && ser.points) || [])
+      .map((p) => (Array.isArray(p) ? [p[0], parseFloat(p[1])] : [p.t, parseFloat(p.v)]))
+      .filter(([, v]) => !Number.isNaN(v));
+  };
+  const vmLast = (pts) => (pts.length ? pts[pts.length - 1][1] : null);
+  const vmStep = () => (state.range === "24h" ? "30m" : state.range === "6h" ? "10m" : "2m");
+
+  async function loadVmMetrics(apps) {
+    if (!state.caps.includes("metrics") && state.caps.length) return; // capability-gated when declared
+    for (const a of apps) {
+      const name = a.name || a.app_name;
+      if (!name || (a.phase !== "Live" && a.phase !== "Failed")) continue;
+      try {
+        const m = await kontract.metrics(state.org, name, { range: state.range, step: vmStep() });
+        state.vm.set(a.app_name || name, {
+          cpu: vmTuples(m, "cpu"), mem: vmTuples(m, "memory"),
+          rx: vmTuples(m, "network_rx"), tx: vmTuples(m, "network_tx"),
+          cpuLim: vmLast(vmTuples(m, "cpu_limit")), memLim: vmLast(vmTuples(m, "memory_limit")),
+        });
+      } catch (err) { /* keep dashes — metered data may lag a fresh board */ }
+    }
+  }
+
+  function boardRadioLine(l) {
+    const pod = l && l.pod ? String(l.pod).slice(-12) : "";
+    const line = l && (l.line ?? l.message) != null ? String(l.line ?? l.message) : String(l);
+    return feedItem(new Date().toISOString(), pod ? "info" : "warn", pod || "notice", state.selected || "", line);
+  }
+
+  function closeBoardRadio() {
+    if (state.logSub) { try { state.logSub(); } catch (e) {} }
+    state.logSub = null;
+  }
+
+  function openBoardTelemetry(app) {
+    state.selected = app.app_name || app.name;
+    const sec = $("#board-telemetry");
+    sec.hidden = false;
+    $("#btel-name").textContent = state.selected;
+    renderBoardTelemetry();
+    // live radio — the board speaks for itself
+    closeBoardRadio();
+    const radio = $("#btel-radio");
+    radio.textContent = "";
+    const logState = $("#btel-logstate");
+    if (!state.caps.includes("runtime-logs") || typeof kontract.logs !== "function") {
+      logState.textContent = "not broadcast on this install";
+      return;
+    }
+    logState.textContent = "receiving";
+    state.logSub = kontract.logs(state.org, app.name || app.app_name, (l) => {
+      radio.appendChild(boardRadioLine(l));
+      while (radio.childElementCount > 60) radio.removeChild(radio.firstChild);
+      radio.scrollTop = radio.scrollHeight;
+    }, () => { state.logSub = null; logState.textContent = "signal lost — reopen the board to retune"; });
+    sec.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function renderBoardTelemetry() {
+    if (!state.selected) return;
+    const vm = state.vm.get(state.selected);
+    const cpuEl = $("#btel-chart-cpu"), memEl = $("#btel-chart-mem"), netEl = $("#btel-chart-net");
+    if (!vm || !vm.cpu.length) {
+      for (const el of [cpuEl, memEl, netEl]) el.textContent = "";
+      $("#btel-cpu-big").textContent = "–";
+      $("#btel-mem-big").textContent = "–";
+      $("#btel-net-big").textContent = "–";
+      $("#btel-cpu-sub").textContent = "no metered samples yet — a fresh board fills in within a couple of minutes";
+      return;
+    }
+    renderChart(cpuEl, [{ name: "cpu", points: vm.cpu }], { colors: ["#0b8f4d"], label: "Metered CPU cores" });
+    renderChart(memEl, [{ name: "mem", points: vm.mem }], { colors: ["#f5841f"], label: "Metered memory" });
+    renderChart(netEl, [{ name: "rx", points: vm.rx }, { name: "tx", points: vm.tx }], { colors: ["#2a9d8f", "#ffb020"], label: "Metered network rx/tx" });
+    $("#btel-cpu-big").textContent = "";
+    $("#btel-cpu-big").append(fmtCores(vmLast(vm.cpu) || 0), smallEl(" cores"));
+    $("#btel-cpu-sub").textContent = vm.cpuLim ? "of " + fmtCores(vm.cpuLim) + " limit · " + state.range : state.range + " window";
+    $("#btel-mem-big").textContent = fmtBytes(vmLast(vm.mem) || 0);
+    $("#btel-mem-sub").textContent = vm.memLim ? "of " + fmtBytes(vm.memLim) + " limit" : "";
+    $("#btel-net-big").textContent = "";
+    $("#btel-net-big").append(fmtBps(vmLast(vm.rx) || 0), smallEl(" in"));
+    $("#btel-net-sub").textContent = "out " + fmtBps(vmLast(vm.tx) || 0) + " · rx teal, tx gold";
+  }
+
+  function renderOrgTide(q) {
+    if (!q) return null;
+    const card = document.createElement("div");
+    card.className = "panel beach";
+    const h = document.createElement("h3");
+    h.textContent = "The Org Tide";
+    const band = document.createElement("span");
+    band.className = "band";
+    band.textContent = q.plan ? q.plan + " plan" : "quota";
+    h.appendChild(band);
+    card.appendChild(h);
+    const dim = (d, label, fmt) => {
+      const used = parseQty(d && d.used), lim = parseQty(d && d.limit);
+      if (isFinite(lim) && lim > 0) card.appendChild(capBar(label, used, lim, fmt));
+    };
+    dim(q.cpu, "cpu", fmtCores);
+    dim(q.memory, "memory", fmtBytes);
+    dim(q.storage, "storage", fmtBytes);
+    return card;
+  }
+
+  function renderZones(zones, quotaCard) {
     const el = $("#beaches");
     el.textContent = "";
+    if (quotaCard) el.appendChild(quotaCard);
     for (const z of zones) {
       const card = document.createElement("div");
       card.className = "panel beach";
@@ -426,8 +542,25 @@
       h.appendChild(band);
       card.appendChild(h);
       const st = z.status || {};
-      card.appendChild(capBar("cpu", parseQty(st.used_cpu), parseQty(st.capacity_cpu), fmtCores));
-      card.appendChild(capBar("memory", parseQty(st.used_memory), parseQty(st.capacity_memory), fmtBytes));
+      const capCpu = parseQty(st.capacity_cpu), capMem = parseQty(st.capacity_memory);
+      if (isFinite(capCpu) && capCpu > 0) {
+        card.appendChild(capBar("cpu", parseQty(st.used_cpu), capCpu, fmtCores));
+        card.appendChild(capBar("memory", parseQty(st.used_memory), capMem, fmtBytes));
+      } else {
+        // zones are band-less now — the org tide (quota) is the only ceiling
+        const line = document.createElement("div");
+        line.className = "cap";
+        const lbl = document.createElement("div");
+        lbl.className = "lbl";
+        const l = document.createElement("span");
+        l.textContent = "in the water";
+        const r = document.createElement("span");
+        const drawn = parseQty(st.allocated_cpu ?? st.used_cpu);
+        r.textContent = (isFinite(drawn) && drawn ? fmtCores(drawn) + " cpu drawn · " : "") + String(st.apps ?? 0) + " boards";
+        lbl.append(l, r);
+        line.appendChild(lbl);
+        card.appendChild(line);
+      }
       el.appendChild(card);
     }
   }
@@ -494,6 +627,16 @@
         brk.textContent = "–";
       }
 
+      // metered columns — kontract (VictoriaMetrics), the platform's own meter
+      const vm = state.vm.get(a.app_name);
+      if (vm && vm.cpu.length) {
+        cell(tr, fmtCores(vmLast(vm.cpu) || 0), "num");
+        cell(tr, fmtBytes(vmLast(vm.mem) || 0), "num");
+      } else {
+        cell(tr, "–", "num dim");
+        cell(tr, "–", "num dim");
+      }
+
       // measured columns — groundcover, joined by zone namespace + name
       const zw = matchZoneWorkload(a, zoneWorkloads);
       if (zw) {
@@ -506,6 +649,12 @@
         cell(tr, "–", "num dim");
         cell(tr, "–", "num dim");
       }
+
+      tr.style.cursor = "pointer";
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest("a")) return;
+        openBoardTelemetry(a);
+      });
 
       // ship moment: a board that was paddling out is now riding
       const prev = state.lastPhases.get(a.app_name);
@@ -535,17 +684,20 @@
       return { apps: SAMPLE_APPS, demo: true };
     }
     const org = new URLSearchParams(location.search).get("org") || "";
+    state.org = org;
     try {
       // discover first — render only what the platform declares (spec rule 5)
       const disco = await kontract.discover(org);
       const caps = (disco && disco.capabilities) || [];
+      state.caps = caps;
       const wantZones = !caps.length || caps.includes("zones");
-      const [zones, apps] = await Promise.all([
+      const [zones, apps, quota] = await Promise.all([
         wantZones ? kontract.zones(org) : Promise.resolve([]),
         kontract.apps(org),
+        caps.includes("quota") && typeof kontract.quota === "function" ? kontract.quota(org).catch(() => null) : Promise.resolve(null),
       ]);
       modeEl.textContent = "org · " + org;
-      renderZones(Array.isArray(zones) ? zones : []);
+      renderZones(Array.isArray(zones) ? zones : [], renderOrgTide(quota));
       return { apps: Array.isArray(apps) ? apps : [], demo: false };
     } catch (err) {
       modeEl.textContent = "kontract unavailable — showing demo tide pool";
@@ -636,9 +788,13 @@
   async function refresh() {
     // Plane 1 first — the user's boards lead the page.
     const k = await loadKontract();
+    // normalize: real kontract apps carry status.phase; samples carry phase
+    for (const a of k.apps) if (!a.phase) a.phase = a.status && a.status.phase;
+    if (!k.demo) await loadVmMetrics(k.apps);
     const zoneWorkloads = await loadZoneWaters(k.demo);
     renderApps(k.apps, zoneWorkloads);
     setBoardConditions(k.apps);
+    renderBoardTelemetry();
 
     // Plane 3 — control plane telemetry.
     try {
@@ -673,9 +829,23 @@
       state.range = btn.dataset.range;
       document.querySelectorAll("#range-picker button").forEach((b) => b.classList.toggle("on", b === btn));
       loadSeries().catch(() => {});
+      // the metered plane follows the same window, so the two instruments
+      // stay comparable at a glance
+      state.vm.clear();
+      refresh().catch(() => {});
+    });
+    $("#btel-close").addEventListener("click", () => {
+      $("#board-telemetry").hidden = true;
+      state.selected = null;
+      closeBoardRadio();
     });
 
     await refresh();
+    // push-driven refresh when the platform supports it; the 30s poll stays
+    // as the fallback heartbeat either way
+    if (kontract.isLaunched() && typeof kontract.appEvents === "function") {
+      try { state.evtSub = kontract.appEvents(state.org, () => refresh().catch(() => {}), () => { state.evtSub = null; }); } catch (e) {}
+    }
     setInterval(refresh, 30000);
   }
 

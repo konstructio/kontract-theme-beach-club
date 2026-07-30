@@ -4,7 +4,7 @@ meta:
   displayName: "Beach Club"
   profile: informational
   contract: v2
-  capabilities: [apps, zones]
+  capabilities: [apps, zones, quota, runtime-logs, app-events]
 
 metaphor:
   premise: >

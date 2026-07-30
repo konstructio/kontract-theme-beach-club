@@ -98,12 +98,50 @@
         <table class="tbl" id="boards">
           <thead>
             <tr><th>status</th><th>board</th><th>beach</th><th class="num">size</th><th>break</th>
+              <th class="num">metered cpu</th><th class="num">metered mem</th>
               <th class="num live-col">cpu</th><th class="num live-col">req/s</th><th class="num live-col">errors</th></tr>
           </thead>
           <tbody></tbody>
         </table>
-        <p class="tbl-note">status · size · break are <b>kontract spec</b>; cpu · req/s · errors are <b>groundcover measured</b> — dashes until your zone's cluster has an agent</p>
+        <p class="tbl-note">status · size · break are <b>kontract spec</b>; metered cpu · mem are <b>kontract metered</b> (the platform's VictoriaMetrics); cpu · req/s · errors are <b>groundcover measured</b> (eBPF) — the same workload from both instruments, side by side. Click a board for its full telemetry.</p>
       </div>
+    </section>
+
+    <!-- ============ PLANE 1½ · BOARD TELEMETRY (kontract metered, correlates with zone waters) ============ -->
+    <section aria-labelledby="h-boardtel" id="board-telemetry" hidden>
+      <div class="sec-head">
+        <h2 id="h-boardtel">Board Telemetry · <span id="btel-name">–</span></h2>
+        <span class="src-badge kontract">kontract · metered</span>
+        <span class="what">VictoriaMetrics series for this board — line them up with Zone Waters and the Swell Gauges below to correlate metered vs measured</span>
+        <span class="spacer"></span>
+        <button class="gc-link" id="btel-close" type="button">close ×</button>
+      </div>
+      <div class="gauges">
+        <div class="panel gauge">
+          <h3>CPU · metered</h3>
+          <div class="big" id="btel-cpu-big">–</div>
+          <div class="sub" id="btel-cpu-sub"></div>
+          <div class="chart" id="btel-chart-cpu"></div>
+        </div>
+        <div class="panel gauge">
+          <h3>Memory · metered</h3>
+          <div class="big" id="btel-mem-big">–</div>
+          <div class="sub" id="btel-mem-sub"></div>
+          <div class="chart" id="btel-chart-mem"></div>
+        </div>
+        <div class="panel gauge">
+          <h3>Network · metered</h3>
+          <div class="big" id="btel-net-big">–</div>
+          <div class="sub" id="btel-net-sub"></div>
+          <div class="chart" id="btel-chart-net"></div>
+        </div>
+      </div>
+      <div class="sec-head" style="margin-top:10px">
+        <h2 style="font-size:15px">Board Radio</h2>
+        <span class="src-badge kontract">kontract · live</span>
+        <span class="what">runtime log lines streamed from this board's pods · <span id="btel-logstate">tuning…</span></span>
+      </div>
+      <div class="panel feed" id="btel-radio"></div>
     </section>
 
     <!-- ============ PLANE 2 · ZONE WATERS (groundcover, correlated to zones) ============ -->
