@@ -733,7 +733,22 @@
     const modeEl = $("#kontract-mode");
     if (!kontract.isLaunched()) {
       modeEl.textContent = "demo tide pool — launch from Konstruct for your org";
+      // Standalone with a live control plane is a confusing half-truth —
+      // stamp the demo half loudly so nobody mistakes sample surf for theirs.
       renderZones(SAMPLE_ZONES);
+      const beachesEl = $("#beaches");
+      const note = document.createElement("div");
+      note.className = "panel";
+      note.style.borderLeft = "3px solid #f5841f";
+      note.style.gridColumn = "1 / -1";
+      const b = document.createElement("b");
+      b.textContent = "These beaches are demo data. ";
+      const rest = document.createTextNode(
+        "You are viewing the theme directly, so the kontract plane shows sample zones and boards. " +
+        "Launch Beach Club from Konstruct and this whole section becomes your organization — " +
+        "the groundcover sections further down are live either way.");
+      note.append(b, rest);
+      beachesEl.insertBefore(note, beachesEl.firstChild);
       return { apps: SAMPLE_APPS, demo: true };
     }
     const org = new URLSearchParams(location.search).get("org") || "";
