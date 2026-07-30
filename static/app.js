@@ -23,6 +23,9 @@
     shipMomentShown: false,
     org: "",
     caps: [],
+    zones: [],
+    quota: null,
+    lastApps: [],
     vm: new Map(), // app name -> { cpu:[[t,v]…], mem, rx, tx } from kontract.metrics
     selected: null,
     logSub: null,
@@ -430,6 +433,28 @@
   const vmLast = (pts) => (pts.length ? pts[pts.length - 1][1] : null);
   const vmStep = () => (state.range === "24h" ? "30m" : state.range === "6h" ? "10m" : "2m");
 
+  // Pointwise sum of ragged tuple series, aligned at the tail (freshest
+  // samples), for per-beach aggregate charts.
+  function sumTailTuples(list) {
+    const arrs = list.filter((a) => a && a.length);
+    const L = Math.max(0, ...arrs.map((a) => a.length));
+    if (L < 2) return [];
+    const ref = arrs.find((a) => a.length === L) || [];
+    const out = [];
+    for (let k = L; k > 0; k--) {
+      let v = 0;
+      const t = ref[ref.length - k] ? ref[ref.length - k][0] : k;
+      for (const a of arrs) {
+        const pt = a[a.length - k];
+        if (pt && typeof pt[1] === "number" && !Number.isNaN(pt[1])) v += pt[1];
+      }
+      out.push([t, v]);
+    }
+    return out;
+  }
+
+  function zoneOf(a) { return a.zone_ref || a.environment || ""; }
+
   async function loadVmMetrics(apps) {
     if (!state.caps.includes("metrics") && state.caps.length) return; // capability-gated when declared
     for (const a of apps) {
@@ -560,6 +585,30 @@
         lbl.append(l, r);
         line.appendChild(lbl);
         card.appendChild(line);
+      }
+      // the beach's own surf: metered cpu + memory summed across its boards
+      const boardsHere = (state.lastApps || []).filter((a) => zoneOf(a) === z.name);
+      const cpuAgg = sumTailTuples(boardsHere.map((a) => (state.vm.get(a.app_name || a.name) || {}).cpu));
+      const memAgg = sumTailTuples(boardsHere.map((a) => (state.vm.get(a.app_name || a.name) || {}).mem));
+      if (cpuAgg.length > 1) {
+        const mkChart = (label, series, color, valueText) => {
+          const head = document.createElement("div");
+          head.className = "lbl";
+          head.style.marginTop = "8px";
+          const hl = document.createElement("span");
+          hl.textContent = label;
+          const hv = document.createElement("span");
+          hv.textContent = valueText;
+          head.append(hl, hv);
+          const chart = document.createElement("div");
+          chart.className = "chart";
+          renderChart(chart, [{ name: label, points: series }], { colors: [color], label: label + " across this beach" });
+          card.append(head, chart);
+        };
+        const cpuNow = cpuAgg[cpuAgg.length - 1][1];
+        const memNow = memAgg.length ? memAgg[memAgg.length - 1][1] : 0;
+        mkChart("cpu · all boards", cpuAgg, "#0b8f4d", fmtCores(cpuNow) + " cores");
+        mkChart("memory · all boards", memAgg, "#f5841f", fmtBytes(memNow));
       }
       el.appendChild(card);
     }
@@ -697,7 +746,9 @@
         caps.includes("quota") && typeof kontract.quota === "function" ? kontract.quota(org).catch(() => null) : Promise.resolve(null),
       ]);
       modeEl.textContent = "org · " + org;
-      renderZones(Array.isArray(zones) ? zones : [], renderOrgTide(quota));
+      state.zones = Array.isArray(zones) ? zones : [];
+      state.quota = quota;
+      renderZones(state.zones, renderOrgTide(quota));
       return { apps: Array.isArray(apps) ? apps : [], demo: false };
     } catch (err) {
       modeEl.textContent = "kontract unavailable — showing demo tide pool";
@@ -790,7 +841,12 @@
     const k = await loadKontract();
     // normalize: real kontract apps carry status.phase; samples carry phase
     for (const a of k.apps) if (!a.phase) a.phase = a.status && a.status.phase;
-    if (!k.demo) await loadVmMetrics(k.apps);
+    state.lastApps = k.apps;
+    if (!k.demo) {
+      await loadVmMetrics(k.apps);
+      // beaches painted before metrics arrived — repaint with the surf drawn in
+      renderZones(state.zones, renderOrgTide(state.quota));
+    }
     const zoneWorkloads = await loadZoneWaters(k.demo);
     renderApps(k.apps, zoneWorkloads);
     setBoardConditions(k.apps);
