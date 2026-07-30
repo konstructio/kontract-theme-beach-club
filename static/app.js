@@ -456,7 +456,7 @@
   function zoneOf(a) { return a.zone_ref || a.environment || ""; }
 
   async function loadVmMetrics(apps) {
-    if (!state.caps.includes("metrics") && state.caps.length) return; // capability-gated when declared
+    // metrics has no capability flag — it is part of the base contract
     for (const a of apps) {
       const name = a.name || a.app_name;
       if (!name || (a.phase !== "Live" && a.phase !== "Failed")) continue;
