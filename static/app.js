@@ -75,6 +75,28 @@
 
   // ---------- deeplinks into the groundcover UI ----------
 
+  // gcLink builds a per-record jump into the groundcover UI: the right
+  // section with namespace/workload carried as query params. If the UI
+  // ignores a param you still land on the right instrument, one filter away.
+  function gcLink(section, params) {
+    const base = state.mode.uiBaseUrl || "https://groundcover.civo.io";
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params || {})) if (v) q.set(k, v);
+    const qs = q.toString();
+    return base + "/" + section + (qs ? "?" + qs : "");
+  }
+
+  function gcJump(section, label, params, title) {
+    const a = document.createElement("a");
+    a.className = "gc-mini";
+    a.href = gcLink(section, params);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = label;
+    a.title = title || ("open " + section + " in groundcover");
+    return a;
+  }
+
   function wireDeeplinks() {
     const base = state.mode.uiBaseUrl || "https://groundcover.civo.io";
     document.querySelectorAll("[data-gc-path]").forEach((a) => {
@@ -330,6 +352,8 @@
       cnt.className = "dim";
       cnt.textContent = " · " + g.ws.length + (g.ws.length === 1 ? " workload" : " workloads");
       nameCell.appendChild(cnt);
+      nameCell.appendChild(gcJump("logs", "logs↗", { namespace: g.ns }, "this namespace's logs in groundcover"));
+      nameCell.appendChild(gcJump("traces", "traces↗", { namespace: g.ns }, "this namespace's traces in groundcover"));
       cell(hr, g.rps.toFixed(g.rps >= 10 ? 0 : 1), "num");
       const gErrClass = g.err > 5 ? "bad" : g.err > 1 ? "warn" : "ok";
       cell(hr, fmtPct(g.err) + "%", "num " + gErrClass);
@@ -341,6 +365,9 @@
         const name = tr.insertCell();
         name.className = "wl-sub";
         name.textContent = w.name;
+        name.appendChild(gcJump("workloads", "apm↗", { namespace: w.namespace, workload: w.name }, "this workload in groundcover"));
+        name.appendChild(gcJump("logs", "logs↗", { namespace: w.namespace, workload: w.name }, "this workload's logs in groundcover"));
+        name.appendChild(gcJump("traces", "traces↗", { namespace: w.namespace, workload: w.name }, "this workload's traces in groundcover"));
         cell(tr, w.rps.toFixed(w.rps >= 10 ? 0 : 1), "num");
         const errClass = w.errorRatePct > 5 ? "bad" : w.errorRatePct > 1 ? "warn" : "ok";
         cell(tr, fmtPct(w.errorRatePct) + "%", "num " + errClass);
@@ -360,7 +387,7 @@
 
   // ---------- feeds ----------
 
-  function feedItem(ts, sevClass, sevText, srcText, msgText) {
+  function feedItem(ts, sevClass, sevText, srcText, msgText, jump) {
     const item = document.createElement("div");
     item.className = "feed-item";
     const t = document.createElement("span");
@@ -379,6 +406,7 @@
     msg.textContent = msgText;
     msg.title = msgText;
     body.append(src, msg);
+    if (jump) body.appendChild(jump);
     item.append(t, sev, body);
     return item;
   }
@@ -401,12 +429,14 @@
     for (const i of issues) {
       const sevClass = /crit|high|error/i.test(i.severity) ? "bad" : "warn";
       el.appendChild(feedItem(i.since || new Date().toISOString(), sevClass, i.severity || "issue",
-        (i.namespace ? i.namespace + " · " : "") + i.entity, i.title));
+        (i.namespace ? i.namespace + " · " : "") + i.entity, i.title,
+        gcJump("issues", "open↗", { namespace: i.namespace }, "issues in groundcover")));
       n++;
     }
     for (const e of events) {
       const sevClass = /error|fail/i.test(e.reason) ? "bad" : e.type === "Warning" ? "warn" : "info";
-      el.appendChild(feedItem(e.ts, sevClass, e.reason, (e.namespace ? e.namespace + " · " : "") + e.entity, e.message));
+      el.appendChild(feedItem(e.ts, sevClass, e.reason, (e.namespace ? e.namespace + " · " : "") + e.entity, e.message,
+        gcJump("events", "open↗", { namespace: e.namespace }, "events in groundcover")));
       if (++n >= 40) break;
     }
     if (!n) calm(el, "No wipeouts on the books for the last hour.");
@@ -422,7 +452,8 @@
     }
     for (const l of logs.slice(0, 40)) {
       const sevClass = /err|fatal/i.test(l.level) ? "bad" : "warn";
-      el.appendChild(feedItem(l.ts, sevClass, l.level, (l.namespace ? l.namespace + " · " : "") + l.workload, l.body));
+      el.appendChild(feedItem(l.ts, sevClass, l.level, (l.namespace ? l.namespace + " · " : "") + l.workload, l.body,
+        gcJump("logs", "open↗", { namespace: l.namespace, workload: l.workload }, "these logs in groundcover")));
     }
   }
 
@@ -848,7 +879,11 @@
       } else {
         zoneCell.textContent = "";
       }
-      cell(tr, w.name, "wl-name");
+      const zwName = tr.insertCell();
+      zwName.className = "wl-name";
+      zwName.textContent = w.name;
+      zwName.appendChild(gcJump("workloads", "apm↗", { namespace: w.namespace, workload: w.name }, "this workload in groundcover"));
+      zwName.appendChild(gcJump("logs", "logs↗", { namespace: w.namespace, workload: w.name }, "this workload's logs in groundcover"));
       cell(tr, fmtCores(w.cpuCores), "num");
       cell(tr, fmtBytes(w.memBytes), "num");
       cell(tr, w.rps.toFixed(w.rps >= 10 ? 0 : 1), "num");

@@ -621,3 +621,8 @@ footer .tagline { color: #c9660d; font-weight: 700; }
 /* namespace grouping in The Lineup: a group opens with its subtotal row */
 #lineup .ns-row td { background: rgba(42, 157, 143, 0.08); border-top: 2px solid rgba(42, 157, 143, 0.35); font-weight: 700; }
 #lineup .wl-sub { padding-left: 22px; color: #5a5348; }
+
+/* per-record jumps into the groundcover UI */
+.gc-mini { margin-left: 8px; font-size: 10.5px; color: #b8845a; text-decoration: none; letter-spacing: 0.02em; white-space: nowrap; }
+.gc-mini:hover { color: #f5841f; text-decoration: underline; }
+.feed-item .gc-mini { flex-shrink: 0; align-self: baseline; }
