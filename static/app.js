@@ -131,7 +131,15 @@
   }
 
   // Conditions read from the user's boards — their apps come first.
-  function setBoardConditions(apps) {
+  function setBoardConditions(apps, noOrg) {
+    if (noOrg) {
+      const cond = $("#cond");
+      cond.classList.remove("choppy", "blownout");
+      cond.textContent = "offshore";
+      $("#report-sub").textContent = "Launch from Konstruct to read your boards — conditions come from real apps only.";
+      $("#shore-stats").textContent = "";
+      return;
+    }
     const wiped = apps.filter((a) => a.phase === "Failed").length;
     const busy = apps.filter((a) => a.phase && a.phase !== "Live" && a.phase !== "Failed").length;
     const riding = apps.filter((a) => a.phase === "Live").length;
@@ -391,24 +399,6 @@
 
   // ---------- plane 1: kontract beaches & boards ----------
 
-  const SAMPLE_ZONES = [
-    { name: "north-point", display_name: "North Point", band: "large", status: { capacity_cpu: "30", capacity_memory: "60Gi", used_cpu: "11.2", used_memory: "22Gi" } },
-    { name: "tide-pool", display_name: "Tide Pool", band: "small", status: { capacity_cpu: "8", capacity_memory: "16Gi", used_cpu: "2.1", used_memory: "5Gi" } },
-  ];
-  const SAMPLE_APPS = [
-    { app_name: "reef-api", phase: "Live", zone_ref: "north-point", size: "m", status: { url: "https://reef-api.example.dev" } },
-    { app_name: "swell-tracker", phase: "Live", zone_ref: "north-point", size: "s", status: { url: "https://swell.example.dev" } },
-    { app_name: "board-rentals", phase: "Building", zone_ref: "tide-pool", size: "s", status: {} },
-    { app_name: "surf-cam", phase: "Live", zone_ref: "tide-pool", size: "m", status: { url: "https://cam.example.dev" } },
-    { app_name: "shark-alerts", phase: "Failed", zone_ref: "north-point", size: "s", status: { message: "image pull backoff: manifest unknown" } },
-  ];
-  // What Zone Waters looks like once agents reach the zone clusters — shown in
-  // the standalone demo only, and labeled as demo.
-  const SAMPLE_ZONE_WATERS = [
-    { name: "reef-api", namespace: "kontract-demo-north-point", zone: "north-point", cluster: "k-demo", cpuCores: 0.31, memBytes: 402653184, rps: 42.7, errorRatePct: 0.2, p50Ms: 4, p95Ms: 38, restarts: 0 },
-    { name: "swell-tracker", namespace: "kontract-demo-north-point", zone: "north-point", cluster: "k-demo", cpuCores: 0.12, memBytes: 197132288, rps: 8.1, errorRatePct: 0, p50Ms: 2, p95Ms: 12, restarts: 0 },
-    { name: "surf-cam", namespace: "kontract-demo-tide-pool", zone: "tide-pool", cluster: "k-demo", cpuCores: 0.55, memBytes: 645922816, rps: 17.3, errorRatePct: 1.4, p50Ms: 11, p95Ms: 140, restarts: 1 },
-  ];
 
   function parseQty(q) {
     if (q == null) return NaN;
@@ -529,6 +519,19 @@
     $("#btel-net-big").textContent = "";
     $("#btel-net-big").append(fmtBps(vmLast(vm.rx) || 0), smallEl(" in"));
     $("#btel-net-sub").textContent = "out " + fmtBps(vmLast(vm.tx) || 0) + " · rx teal, tx gold";
+  }
+
+  function renderNoOrg(message) {
+    const beachesEl = $("#beaches");
+    beachesEl.textContent = "";
+    const note = document.createElement("div");
+    note.className = "panel";
+    note.style.borderLeft = "3px solid #f5841f";
+    note.style.gridColumn = "1 / -1";
+    const b = document.createElement("b");
+    b.textContent = "No beaches to show. ";
+    note.append(b, document.createTextNode(message));
+    beachesEl.appendChild(note);
   }
 
   function renderOrgTide(q) {
@@ -732,24 +735,11 @@
   async function loadKontract() {
     const modeEl = $("#kontract-mode");
     if (!kontract.isLaunched()) {
-      modeEl.textContent = "demo tide pool — launch from Konstruct for your org";
-      // Standalone with a live control plane is a confusing half-truth —
-      // stamp the demo half loudly so nobody mistakes sample surf for theirs.
-      renderZones(SAMPLE_ZONES);
-      const beachesEl = $("#beaches");
-      const note = document.createElement("div");
-      note.className = "panel";
-      note.style.borderLeft = "3px solid #f5841f";
-      note.style.gridColumn = "1 / -1";
-      const b = document.createElement("b");
-      b.textContent = "These beaches are demo data. ";
-      const rest = document.createTextNode(
-        "You are viewing the theme directly, so the kontract plane shows sample zones and boards. " +
-        "Launch Beach Club from Konstruct and this whole section becomes your organization — " +
-        "the groundcover sections further down are live either way.");
-      note.append(b, rest);
-      beachesEl.insertBefore(note, beachesEl.firstChild);
-      return { apps: SAMPLE_APPS, demo: true };
+      modeEl.textContent = "no org context";
+      renderNoOrg("You are viewing the theme directly, so there is no organization to read. " +
+        "Launch Beach Club from Konstruct and this section becomes your real zones and apps. " +
+        "Nothing here is ever mocked — no data beats fake data.");
+      return { apps: [], demo: true };
     }
     const org = new URLSearchParams(location.search).get("org") || "";
     state.org = org;
@@ -770,9 +760,10 @@
       renderZones(state.zones, renderOrgTide(quota));
       return { apps: Array.isArray(apps) ? apps : [], demo: false };
     } catch (err) {
-      modeEl.textContent = "kontract unavailable — showing demo tide pool";
-      renderZones(SAMPLE_ZONES);
-      return { apps: SAMPLE_APPS, demo: true };
+      modeEl.textContent = "kontract unavailable";
+      renderNoOrg("Couldn't reach the kontract: " + (err && err.message || err) + ". " +
+        "Nothing is mocked in its place — reload, or launch again from Konstruct.");
+      return { apps: [], demo: true };
     }
   }
 
@@ -785,13 +776,6 @@
       data = await gc("zone-workloads");
     } catch (err) {
       // fall through to the no-coverage state
-    }
-
-    // Standalone demo: show what this panel becomes once agents reach the
-    // zone clusters, clearly labeled.
-    if (demo && !data.agentCoverage) {
-      renderZoneWatersTable(el, SAMPLE_ZONE_WATERS, true);
-      return SAMPLE_ZONE_WATERS;
     }
 
     if (!data.agentCoverage) {
@@ -807,18 +791,12 @@
       return [];
     }
 
-    renderZoneWatersTable(el, data.workloads, false);
+    renderZoneWatersTable(el, data.workloads);
     return data.workloads;
   }
 
-  function renderZoneWatersTable(el, workloads, demo) {
+  function renderZoneWatersTable(el, workloads) {
     el.textContent = "";
-    if (demo) {
-      const note = document.createElement("p");
-      note.className = "tbl-note";
-      note.textContent = "demo data — this is what zone waters look like once your zone clusters report to groundcover";
-      el.appendChild(note);
-    }
     const table = document.createElement("table");
     table.className = "tbl";
     const thead = table.createTHead();
@@ -868,10 +846,36 @@
     }
     const zoneWorkloads = await loadZoneWaters(k.demo);
     renderApps(k.apps, zoneWorkloads);
-    setBoardConditions(k.apps);
+    setBoardConditions(k.apps, k.demo);
     renderBoardTelemetry();
 
-    // Plane 3 — control plane telemetry.
+    // Plane 3 — control plane telemetry. Never mocked: when groundcover is
+    // not configured, every measured panel says so instead of pretending.
+    if (!state.mode.live) {
+      const msg = "groundcover is not connected on this install — set GROUNDCOVER_API_KEY on this app (Konduit → Variables) and these instruments come alive.";
+      for (const sel of ["#lineup tbody", "#wipeouts", "#patrol", "#zone-waters"]) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        el.textContent = "";
+        const d = document.createElement("div");
+        d.className = "empty-calm";
+        const b = document.createElement("b");
+        b.textContent = "Not connected. ";
+        d.append(b, document.createTextNode(msg));
+        el.appendChild(d);
+      }
+      for (const id of ["#chart-cpu", "#chart-memory", "#chart-network"]) {
+        const el = $(id);
+        if (el) el.textContent = "";
+      }
+      $("#cpu-big").textContent = "–";
+      $("#mem-big").textContent = "–";
+      $("#net-big").textContent = "–";
+      $("#cpu-sub").textContent = "not connected";
+      $("#mem-sub").textContent = "not connected";
+      $("#net-sub").textContent = "not connected";
+      return;
+    }
     try {
       const { issues } = await loadSummary();
       await Promise.all([loadSeries(), loadLineup(), loadWipeouts(issues), loadPatrol()]);

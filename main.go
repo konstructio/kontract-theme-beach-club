@@ -1,7 +1,7 @@
 // Command kontract-theme-beach-club serves the Beach Club kontract theme: a
 // static frontend (embedded) plus a JSON proxy under /api/gc/ that reads live
-// observability data from the groundcover API, with an embedded sample-data
-// snapshot for standalone/offline use.
+// observability data from the groundcover API. There is no sample fallback —
+// no data beats fake data; unconfigured installs answer honestly with 503.
 //
 // Assets are embedded with go:embed because cloud-native buildpacks strip
 // source files from the final image — a bare http.Dir would 404 in production.
@@ -20,15 +20,11 @@ import (
 	"time"
 )
 
-// staticFS holds the frontend assets. sampleData is embedded separately from a
-// repo-root file so the static/ frontend can evolve independently of the
-// captured snapshot.
+// staticFS holds the frontend assets.
 //
 //go:embed static
 var staticFS embed.FS
 
-//go:embed sample-data.json
-var sampleData []byte
 
 // shutdownTimeout bounds how long in-flight requests may drain on SIGTERM/SIGINT
 // before the server is forced closed.
@@ -40,13 +36,8 @@ func main() {
 
 	cfg := LoadConfig()
 
-	sampler, err := NewSampler(sampleData)
-	if err != nil {
-		logger.Error("failed to parse embedded sample data", "error", err)
-		os.Exit(1)
-	}
 
-	srv := newServer(cfg, sampler, logger)
+	srv := newServer(cfg, logger)
 
 	static, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -98,7 +89,7 @@ func modeLabel(live bool) string {
 	if live {
 		return "live"
 	}
-	return "sample"
+	return "not configured"
 }
 
 // withMiddleware wraps the mux with panic recovery and request logging. The

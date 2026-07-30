@@ -28,18 +28,16 @@ type server struct {
 	cfg    Config
 	gc     *GCClient
 	cache  *Cache
-	sample *Sampler
 	log    *slog.Logger
 }
 
 // newServer constructs a server. The sampler must already be parsed so a broken
 // snapshot fails at boot rather than on first request.
-func newServer(cfg Config, sampler *Sampler, logger *slog.Logger) *server {
+func newServer(cfg Config, logger *slog.Logger) *server {
 	return &server{
 		cfg:    cfg,
 		gc:     NewGCClient(cfg),
 		cache:  NewCache(),
-		sample: sampler,
 		log:    logger,
 	}
 }
@@ -75,33 +73,26 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, payload)
 }
 
-// render is the shared live→sample→cache pipeline for the section-style
-// endpoints. It caches the rendered payload for cacheTTL, de-duplicates
-// concurrent misses, tries live when the server has credentials, and falls back
-// to the embedded sample section on any failure. It only 500s when even the
-// sample section is missing.
-func (s *server) render(w http.ResponseWriter, r *http.Request, cacheKey, sampleKey string, sampleOverrides map[string]any, live func(context.Context) (any, error)) {
+// render is the shared live→cache pipeline for the section-style endpoints.
+// It caches the rendered payload for cacheTTL and de-duplicates concurrent
+// misses. There is NO sample fallback by design: no data beats fake data —
+// an unconfigured or failing upstream answers with an honest error and the
+// frontend renders an honest empty state.
+func (s *server) render(w http.ResponseWriter, r *http.Request, cacheKey, endpoint string, _ map[string]any, live func(context.Context) (any, error)) {
+	if !s.cfg.Live() {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "groundcover is not configured — set GROUNDCOVER_API_KEY")
+		return
+	}
 	payload, err := s.cache.Do(r.Context(), cacheKey, func(ctx context.Context) ([]byte, error) {
-		if s.cfg.Live() {
-			v, liveErr := live(ctx)
-			if liveErr == nil {
-				if b, mErr := json.Marshal(v); mErr == nil {
-					return b, nil
-				} else {
-					liveErr = mErr
-				}
-			}
-			s.log.Warn("live fetch failed; serving sample",
-				"endpoint", sampleKey, "error", liveErr)
+		v, liveErr := live(ctx)
+		if liveErr != nil {
+			return nil, liveErr
 		}
-		if b, ok := s.sample.Section(sampleKey, sampleOverrides); ok {
-			return b, nil
-		}
-		return nil, fmt.Errorf("no sample data for %q", sampleKey)
+		return json.Marshal(v)
 	})
 	if err != nil {
-		s.log.Error("render failed", "endpoint", sampleKey, "error", err)
-		writeError(w, http.StatusInternalServerError, "render_failed", "could not render "+sampleKey)
+		s.log.Error("live fetch failed", "endpoint", endpoint, "error", err)
+		writeError(w, http.StatusBadGateway, "upstream_failed", "groundcover query failed for "+endpoint)
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -144,27 +135,21 @@ func (s *server) handleSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.cfg.Live() {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "groundcover is not configured — set GROUNDCOVER_API_KEY")
+		return
+	}
 	cacheKey := "series:" + metric + ":" + rng
 	payload, err := s.cache.Do(r.Context(), cacheKey, func(ctx context.Context) ([]byte, error) {
-		if s.cfg.Live() {
-			v, liveErr := s.buildSeries(ctx, metric, rng)
-			if liveErr == nil {
-				if b, mErr := json.Marshal(v); mErr == nil {
-					return b, nil
-				} else {
-					liveErr = mErr
-				}
-			}
-			s.log.Warn("live fetch failed; serving sample", "endpoint", "series", "metric", metric, "error", liveErr)
+		v, liveErr := s.buildSeries(ctx, metric, rng)
+		if liveErr != nil {
+			return nil, liveErr
 		}
-		if b, ok := s.sample.Series(metric, rng); ok {
-			return b, nil
-		}
-		return nil, fmt.Errorf("no sample data for series %q", metric)
+		return json.Marshal(v)
 	})
 	if err != nil {
-		s.log.Error("render failed", "endpoint", "series", "error", err)
-		writeError(w, http.StatusInternalServerError, "render_failed", "could not render series")
+		s.log.Error("live fetch failed", "endpoint", "series", "error", err)
+		writeError(w, http.StatusBadGateway, "upstream_failed", "groundcover query failed for series")
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
