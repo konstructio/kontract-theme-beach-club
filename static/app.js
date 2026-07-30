@@ -592,18 +592,22 @@
       const memAgg = sumTailTuples(boardsHere.map((a) => (state.vm.get(a.app_name || a.name) || {}).mem));
       if (cpuAgg.length > 1) {
         const mkChart = (label, series, color, valueText) => {
+          // .lbl only gets its flex layout inside .cap — wrap it, or the
+          // label and value run together
+          const wrapEl = document.createElement("div");
+          wrapEl.className = "cap";
           const head = document.createElement("div");
           head.className = "lbl";
-          head.style.marginTop = "8px";
           const hl = document.createElement("span");
           hl.textContent = label;
           const hv = document.createElement("span");
           hv.textContent = valueText;
           head.append(hl, hv);
+          wrapEl.appendChild(head);
           const chart = document.createElement("div");
           chart.className = "chart";
           renderChart(chart, [{ name: label, points: series }], { colors: [color], label: label + " across this beach" });
-          card.append(head, chart);
+          card.append(wrapEl, chart);
         };
         const cpuNow = cpuAgg[cpuAgg.length - 1][1];
         const memNow = memAgg.length ? memAgg[memAgg.length - 1][1] : 0;
