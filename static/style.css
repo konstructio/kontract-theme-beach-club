@@ -617,3 +617,7 @@ footer .tagline { color: #c9660d; font-weight: 700; }
   .shore-overlay { padding: 18px; }
   .report-eyebrow { letter-spacing: 0.12em; overflow-wrap: anywhere; }
 }
+
+/* namespace grouping in The Lineup: a group opens with its subtotal row */
+#lineup .ns-row td { background: rgba(42, 157, 143, 0.08); border-top: 2px solid rgba(42, 157, 143, 0.35); font-weight: 700; }
+#lineup .wl-sub { padding-left: 22px; color: #5a5348; }

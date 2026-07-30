@@ -300,25 +300,54 @@
     if (!workloads.length) {
       const tr = tb.insertRow();
       const td = tr.insertCell();
-      td.colSpan = 7;
+      td.colSpan = 6;
       td.className = "dim";
       td.textContent = "No traffic in the lineup yet — groundcover will see it the moment a request moves.";
       return;
     }
+    // Golden signals grouped by namespace — namespaces are the tech
+    // boundaries on these clusters, so each group opens with its subtotal:
+    // summed traffic, traffic-weighted error rate, worst p95, summed restarts.
+    const groups = new Map();
     for (const w of workloads) {
-      const tr = tb.insertRow();
-      const name = tr.insertCell();
-      name.className = "wl-name";
-      name.textContent = w.name;
-      const ns = tr.insertCell();
-      ns.className = "dim";
-      ns.textContent = w.namespace;
-      cell(tr, w.rps.toFixed(w.rps >= 10 ? 0 : 1), "num");
-      const errClass = w.errorRatePct > 5 ? "bad" : w.errorRatePct > 1 ? "warn" : "ok";
-      cell(tr, fmtPct(w.errorRatePct) + "%", "num " + errClass);
-      cell(tr, fmtMs(w.p50Ms), "num");
-      cell(tr, fmtMs(w.p95Ms), "num " + (w.p95Ms > 1000 ? "warn" : ""));
-      cell(tr, String(w.restarts), "num " + (w.restarts > 0 ? "warn" : "dim"));
+      const g = groups.get(w.namespace) || [];
+      g.push(w);
+      groups.set(w.namespace, g);
+    }
+    const nsRows = [...groups.entries()].map(([ns, ws]) => {
+      const rps = ws.reduce((t, w) => t + w.rps, 0);
+      const err = rps > 0 ? ws.reduce((t, w) => t + w.errorRatePct * w.rps, 0) / rps : 0;
+      return { ns, ws: ws.slice().sort((a, b) => b.rps - a.rps), rps, err,
+        p95: Math.max(...ws.map((w) => w.p95Ms)), restarts: ws.reduce((t, w) => t + w.restarts, 0) };
+    }).sort((a, b) => b.rps - a.rps);
+    for (const g of nsRows) {
+      const hr = tb.insertRow();
+      hr.className = "ns-row";
+      const nameCell = hr.insertCell();
+      nameCell.className = "wl-name";
+      nameCell.textContent = g.ns;
+      const cnt = document.createElement("span");
+      cnt.className = "dim";
+      cnt.textContent = " · " + g.ws.length + (g.ws.length === 1 ? " workload" : " workloads");
+      nameCell.appendChild(cnt);
+      cell(hr, g.rps.toFixed(g.rps >= 10 ? 0 : 1), "num");
+      const gErrClass = g.err > 5 ? "bad" : g.err > 1 ? "warn" : "ok";
+      cell(hr, fmtPct(g.err) + "%", "num " + gErrClass);
+      cell(hr, "", "num dim");
+      cell(hr, fmtMs(g.p95), "num " + (g.p95 > 1000 ? "warn" : ""));
+      cell(hr, String(g.restarts), "num " + (g.restarts > 0 ? "warn" : "dim"));
+      for (const w of g.ws) {
+        const tr = tb.insertRow();
+        const name = tr.insertCell();
+        name.className = "wl-sub";
+        name.textContent = w.name;
+        cell(tr, w.rps.toFixed(w.rps >= 10 ? 0 : 1), "num");
+        const errClass = w.errorRatePct > 5 ? "bad" : w.errorRatePct > 1 ? "warn" : "ok";
+        cell(tr, fmtPct(w.errorRatePct) + "%", "num " + errClass);
+        cell(tr, fmtMs(w.p50Ms), "num");
+        cell(tr, fmtMs(w.p95Ms), "num " + (w.p95Ms > 1000 ? "warn" : ""));
+        cell(tr, String(w.restarts), "num " + (w.restarts > 0 ? "warn" : "dim"));
+      }
     }
   }
 
